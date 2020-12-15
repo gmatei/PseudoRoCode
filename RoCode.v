@@ -1,8 +1,11 @@
 Require Import Strings.String.
+Require Import Lists.List.
 Local Open Scope string_scope. 
 Local Open Scope list_scope.
 Scheme Equality for string.
+Scheme Equality for list.
 Require Import ZArith.
+
 
 (* Constructor pentru numere naturale *)
 Inductive TipNat :=
@@ -14,6 +17,14 @@ Inductive TipBool :=
   | error_bool : TipBool
   | boolean : bool -> TipBool.
 
+Inductive TipString :=
+  | error_string : TipString
+  | sirchar : string -> TipString.
+
+Inductive TipVector :=
+  | error_vector : TipVector
+  | vector : TipNat -> TipVector -> TipVector.
+
 Coercion numar: nat >-> TipNat.
 Coercion boolean: bool >-> TipBool.
 
@@ -23,7 +34,9 @@ Inductive Rezultat :=
   | noninit : Rezultat
   | default : Rezultat
   | rez_nat : TipNat -> Rezultat
-  | rez_bool : TipBool -> Rezultat.
+  | rez_bool : TipBool -> Rezultat
+  | rez_string : TipString -> Rezultat
+  | rez_vect : TipVector -> Rezultat.
 
 Scheme Equality for Rezultat.
 
@@ -58,7 +71,16 @@ Definition check_type_eq (t1 : Rezultat) (t2 : Rezultat) : bool :=
                      | rez_bool t1 => true
                      | _ => false
                      end
+    | rez_string t1 => match t2 with 
+                     | rez_string t1 => true
+                     | _ => false
+                     end
+    | rez_vect t1 => match t2 with 
+                     | rez_vect t1 => true
+                     | _ => false
+                     end
   end.
+
 
 Compute (check_type_eq (rez_nat 3) (rez_nat 5)). (* true *)
 Compute (check_type_eq noninit (rez_nat 17)). (* false *)
@@ -87,8 +109,9 @@ Inductive AExp :=
 | amul: AExp -> AExp -> AExp 
 | adiv: AExp -> AExp -> AExp 
 | amod: AExp -> AExp -> AExp
-| apower: AExp -> AExp -> AExp.
-
+| apower: AExp -> AExp -> AExp
+| amin: AExp -> AExp -> AExp
+| amax: AExp -> AExp -> AExp.
 
 Coercion anum: TipNat >-> AExp.
 Coercion avar: string >-> AExp.
@@ -100,7 +123,8 @@ Notation "A *' B" := (amul A B)(at level 48, left associativity).
 Notation "A /' B" := (adiv A B)(at level 48, left associativity).
 Notation "A %' B" := (amod A B)(at level 45, left associativity).
 Notation "A ^' B" := (apower A B)(at level 44, left associativity).
-
+Notation "A <?> B" := (amin A B)(at level 55, left associativity).
+Notation "A >?< B" := (amax A B)(at level 55, left associativity).
 
 Definition plus_TipNat (n1 n2 : TipNat) : TipNat :=
   match n1, n2 with
@@ -113,9 +137,9 @@ Definition sub_TipNat (n1 n2 : TipNat) : TipNat :=
   match n1, n2 with
     | error_nat, _ => error_nat
     | _, error_nat => error_nat
-    | numar n1, numar n2 => if Nat.ltb n1 n2
+    | numar v1, numar v2 => if Nat.ltb v1 v2
                         then error_nat
-                        else numar (n1 - n2)
+                        else numar (v1 - v2)
     end.
 
 Definition mul_TipNat (n1 n2 : TipNat) : TipNat :=
@@ -148,6 +172,20 @@ Definition power_TipNat (n1 n2 : TipNat) : TipNat :=
     | numar v1, numar v2 => numar (v1 ^ v2) 
     end.
 
+Definition max_TipNat (n1 n2 : TipNat) : TipNat :=
+  match n1, n2 with
+    | error_nat, _ => error_nat
+    | _, error_nat => error_nat
+    | numar v1, numar v2 => numar (max v1 v2) 
+    end.
+
+Definition min_TipNat (n1 n2 : TipNat) : TipNat :=
+  match n1, n2 with
+    | error_nat, _ => error_nat
+    | _, error_nat => error_nat
+    | numar v1, numar v2 => numar (min v1 v2) 
+    end.
+
 (* Semantica recursiva pentru operatii aritmetice *)
 
 Fixpoint aeval_r (a : AExp) (env : Env) : TipNat :=
@@ -163,6 +201,8 @@ Fixpoint aeval_r (a : AExp) (env : Env) : TipNat :=
   | adiv a1 a2 => (div_TipNat  (aeval_r a1 env) (aeval_r a2 env))
   | amod a1 a2 => (mod_TipNat (aeval_r a1 env) (aeval_r a2 env))
   | apower a1 a2 => (power_TipNat (aeval_r a1 env) (aeval_r a2 env))
+  | amin a1 a2 => (min_TipNat (aeval_r a1 env) (aeval_r a2 env))
+  | amax a1 a2 => (max_TipNat (aeval_r a1 env) (aeval_r a2 env))
   end.
 
 (* Semantica Big-Step pentru operatii artimetice *)
@@ -184,7 +224,7 @@ Inductive aeval : AExp -> Env -> TipNat -> Prop :=
     a2 =[ sigma ]=> i2 ->
     n = (mul_TipNat i1 i2) ->
     a1 *' a2 =[sigma]=> n
-| substract : forall a1 a2 i1 i2 sigma n,
+| minus : forall a1 a2 i1 i2 sigma n,
     a1 =[ sigma ]=> i1 ->
     a2 =[ sigma ]=> i2 ->
     n = (sub_TipNat i1 i2) ->
@@ -204,11 +244,21 @@ Inductive aeval : AExp -> Env -> TipNat -> Prop :=
     a2 =[ sigma ]=> i2 ->
     n = (power_TipNat i1 i2) ->
     a1 ^' a2 =[sigma]=> n
+| minimum : forall a1 a2 i1 i2 sigma n,
+    a1 =[ sigma ]=> i1 ->
+    a2 =[ sigma ]=> i2 ->
+    n = (power_TipNat i1 i2) ->
+    a1 <?> a2 =[sigma]=> n
+| maximum : forall a1 a2 i1 i2 sigma n,
+    a1 =[ sigma ]=> i1 ->
+    a2 =[ sigma ]=> i2 ->
+    n = (power_TipNat i1 i2) ->
+    a1 >?< a2 =[sigma]=> n
 where "a =[ sigma ]=> n" := (aeval a sigma n).
 
-Example substract_error : 1 -' 5 =[ env ]=> error_nat.
+Example minus_error : 1 -' 5 =[ env ]=> error_nat.
 Proof.
-  eapply substract.
+  eapply minus.
   - apply const.
   - apply const.
   - simpl. reflexivity.
@@ -230,6 +280,74 @@ Proof.
   - simpl. reflexivity.
 Qed.
 
+
+Require Import Ascii.
+(* Sintaxa siruri de caractere *)
+Inductive CExp :=
+| cvar: string -> CExp 
+| csir: TipString -> CExp
+| char: (option ascii) -> CExp
+| concat: CExp -> CExp -> CExp
+(*| clength: CExp -> AExp*)
+(*| containsn: CExp -> AExp*)
+| nth_char: CExp -> AExp -> CExp 
+| substringNM: CExp -> AExp -> AExp -> CExp.
+
+Coercion csir: TipString >-> CExp.
+Coercion cvar: string >-> CExp.
+
+
+(* Notatii operatii aritmetice *)
+Notation "A +&+ B" := (concat A B)(at level 50, left associativity).
+Notation "A 'caracterul' B" := (nth_char A B)(at level 50, left associativity).
+Notation "A 'incepand' B 'lungime' C" := (substringNM A B C)(at level 50, left associativity).
+
+Definition concat_TipString (n1 n2 : TipString) : TipString :=
+  match n1, n2 with
+    | error_string, _ => error_string
+    | _, error_string => error_string
+    | sirchar v1, sirchar v2 => sirchar (v1 ++ v2)
+    end.
+
+Definition nth_char_TipString (n1 : TipString) (n2 : TipNat) : CExp :=
+  match n1, n2 with
+    | error_string, _ => error_string
+    | sirchar v1, error_nat => error_string
+    | sirchar v1, numar v2 => (char (get v2 v1))
+    end.
+
+Definition substringNM_TipString (n1 : TipString) (N M : TipNat) : TipString :=
+  match n1, N, M with
+    | error_string, _, _ => error_string
+    | _, error_nat, _ => error_string
+    | _, _, error_nat => error_string
+    | sirchar v1, numar N, numar M => sirchar (substring N M v1)
+    end.
+
+(* Sintaxa vectori *)
+Inductive VExp :=
+| vvar: string -> VExp 
+| vect: TipVector -> VExp
+| vplus: VExp -> VExp -> VExp (*concatenare*)
+| nth_elem: AExp -> VExp -> VExp (*returneaza al n-lea element al vectorului*)
+| head: VExp -> VExp 
+| tail: VExp -> VExp 
+| vlength: VExp -> VExp
+| reverse: VExp -> VExp
+| extractn: AExp -> VExp -> VExp. (*returneaza primele n elemente ale vectorului*)
+
+Coercion vect: TipVector >-> VExp.
+Coercion vvar: string >-> VExp.
+
+(* Notatii vectori *)
+Notation "A |+| B" := (vplus A B)(at level 50, left associativity).
+(*
+Definition plusV (v1 v2 : TipVector) : TipVector :=
+  match v1, v2 with
+    | error_vect, vector v2 => vector v2
+    | vector v1, error_vect => vector v1
+    | vector v1, vector v2 => elem (v1 ++ v2)
+    end. *)
 
 (* Sintaxa booleana *)
 
@@ -388,19 +506,31 @@ Qed.
 Inductive Stmt :=
   | nat_decl: string -> AExp -> Stmt 
   | bool_decl: string -> BExp -> Stmt 
+  | char_decl: string -> CExp -> Stmt     
   | nat_assign : string -> AExp -> Stmt
   | bool_assign : string -> BExp -> Stmt 
+  | char_assign : string -> CExp -> Stmt 
   | sequence : Stmt -> Stmt -> Stmt
   | while : BExp -> Stmt -> Stmt
   | ifthenelse : BExp -> Stmt -> Stmt -> Stmt
-  | ifthen : BExp -> Stmt -> Stmt.
-
+  | ifthen : BExp -> Stmt -> Stmt
+  | skip : Stmt -> Stmt.
+  (*| switch : BExp -> Stmt
+  | break : Stmt.
+  *)
 Notation "X :n= A" := (nat_assign X A)(at level 90).
 Notation "X :b= A" := (bool_assign X A)(at level 90).
+Notation "X :s= A" := (char_assign X A)(at level 90).
 Notation "'iNat' X ::= A" := (nat_decl X A)(at level 90).
 Notation "'iBool' X ::= A" := (bool_decl X A)(at level 90).
+Notation "'iSir' X ::= A" := (char_decl X A)(at level 90).
 Notation "S1 ;; S2" := (sequence S1 S2) (at level 93, right associativity).
-Notation "'fors' ( A # B # C ) { S }" := (A ;; while B ( S ;; C )) (at level 97).
+Notation "'daca' ( A ) 'atunci' { B }" := (ifthen A B) (at level 97).
+Notation "'daca' ( A ) 'atunci' { B } 'altfel' { C }" := (ifthenelse A B C) (at level 97).
+Notation " A '?' B ':' C " := (ifthenelse A B C) (at level 97).
+Notation "'cat_timp' ( A ) { B }" := (while A B) (at level 97).
+Notation "'pentru' ( A # B # C ) { S }" := (A ;; while B ( S ;; C )) (at level 97).
+Notation "'sari_peste' A " := (skip A) (at level 97).
 
 Reserved Notation "S -{ Sigma }-> Sigma'" (at level 60).
 
@@ -423,6 +553,14 @@ Inductive eval : Stmt -> Env -> Env -> Prop :=
     a ={ sigma }=> i ->
     sigma' = (update sigma x (rez_bool i)) ->
     (x :b= a) -{ sigma }-> sigma'
+| e_char_decl: forall a i x sigma sigma',
+   a ={ sigma }=> i ->
+   sigma' = (update sigma x (rez_string i)) ->
+   (x :s= a) -{ sigma }-> sigma'
+| e_char_assign: forall a i x sigma sigma',
+    a ={ sigma }=> i ->
+    sigma' = (update sigma x (rez_string i)) ->
+    (x :s= a) -{ sigma }-> sigma'
 | e_seq : forall s1 s2 sigma sigma1 sigma2,
     s1 -{ sigma }-> sigma1 ->
     s2 -{ sigma1 }-> sigma2 ->
@@ -455,8 +593,10 @@ Fixpoint eval_r (s : Stmt) (env : Env) (gas: nat) : Env :=
                 | sequence S1 S2 => eval_r S2 (eval_r S1 env gas') gas'
                 | nat_decl a aexp => update (update env a default) a (rez_nat (aeval_r aexp env))
                 | bool_decl b bexp => update (update env b default) b (rez_bool (beval_r bexp env))
+                | char_decl b cexp => update (update env c default) c (rez_string (ceval_r cexp env))
                 | nat_assign a aexp => update env a (rez_nat (aeval_r aexp env))
                 | bool_assign b bexp => update env b (rez_bool (beval_r bexp env))
+                | char_assign c cexp => update env c (rez_string (ceval_r cexp env))
                 | ifthen cond s' => 
                     match (beval_r cond env) with
                     | error_bool => env
@@ -484,25 +624,25 @@ Fixpoint eval_r (s : Stmt) (env : Env) (gas: nat) : Env :=
                 end
     end.
 
+
 (*Exemple functionalitate*)
 
 Definition while_stmt :=
     iNat "i" ::= 0 ;;
     iNat "sum" ::= 0 ;;
-    while 
+    cat_timp 
         ("i" <' 6) 
-        (
+        {
            "sum" :n= "sum" +' "i" ;;
            "i" :n= "i" +' 1
-        );;
-    "sum" :n= "sum" ^' 2
+        }
     .
 
 Compute (eval_r while_stmt env 100) "sum".
 
 Definition for_stmt :=
     iNat "sum" ::= 0 ;;
-    fors ( iNat "i" ::= 0 # "i" <e' 6 # "i" :n= "i" +' 1 ) {
+    pentru ( iNat "i" ::= 0 # "i" <e' 6 # "i" :n= "i" +' 1 ) {
       "sum" :n= "sum" +' "i"
     }.
 
