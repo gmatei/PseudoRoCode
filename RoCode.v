@@ -21,9 +21,9 @@ Inductive TipString :=
   | error_string : TipString
   | sirchar : string -> TipString.
 
-Inductive TipVector :=
-  | error_vector : TipVector
-  | vector : TipNat -> TipVector -> TipVector.
+Inductive VectorNat :=
+  | error_vector : VectorNat
+  | vectornat: (list TipNat) -> VectorNat.
 
 Coercion numar: nat >-> TipNat.
 Coercion boolean: bool >-> TipBool.
@@ -35,8 +35,7 @@ Inductive Rezultat :=
   | default : Rezultat
   | rez_nat : TipNat -> Rezultat
   | rez_bool : TipBool -> Rezultat
-  | rez_string : TipString -> Rezultat
-  | rez_vect : TipVector -> Rezultat.
+  | rez_string : TipString -> Rezultat.
 
 Scheme Equality for Rezultat.
 
@@ -73,10 +72,6 @@ Definition check_type_eq (t1 : Rezultat) (t2 : Rezultat) : bool :=
                      end
     | rez_string t1 => match t2 with 
                      | rez_string t1 => true
-                     | _ => false
-                     end
-    | rez_vect t1 => match t2 with 
-                     | rez_vect t1 => true
                      | _ => false
                      end
   end.
@@ -280,74 +275,73 @@ Proof.
   - simpl. reflexivity.
 Qed.
 
-
-Require Import Ascii.
-(* Sintaxa siruri de caractere *)
-Inductive CExp :=
-| cvar: string -> CExp 
-| csir: TipString -> CExp
-| char: (option ascii) -> CExp
-| concat: CExp -> CExp -> CExp
-(*| clength: CExp -> AExp*)
-(*| containsn: CExp -> AExp*)
-| nth_char: CExp -> AExp -> CExp 
-| substringNM: CExp -> AExp -> AExp -> CExp.
-
-Coercion csir: TipString >-> CExp.
-Coercion cvar: string >-> CExp.
-
-
-(* Notatii operatii aritmetice *)
-Notation "A +&+ B" := (concat A B)(at level 50, left associativity).
-Notation "A 'caracterul' B" := (nth_char A B)(at level 50, left associativity).
-Notation "A 'incepand' B 'lungime' C" := (substringNM A B C)(at level 50, left associativity).
-
-Definition concat_TipString (n1 n2 : TipString) : TipString :=
-  match n1, n2 with
-    | error_string, _ => error_string
-    | _, error_string => error_string
-    | sirchar v1, sirchar v2 => sirchar (v1 ++ v2)
-    end.
-
-Definition nth_char_TipString (n1 : TipString) (n2 : TipNat) : CExp :=
-  match n1, n2 with
-    | error_string, _ => error_string
-    | sirchar v1, error_nat => error_string
-    | sirchar v1, numar v2 => (char (get v2 v1))
-    end.
-
-Definition substringNM_TipString (n1 : TipString) (N M : TipNat) : TipString :=
-  match n1, N, M with
-    | error_string, _, _ => error_string
-    | _, error_nat, _ => error_string
-    | _, _, error_nat => error_string
-    | sirchar v1, numar N, numar M => sirchar (substring N M v1)
-    end.
-
-(* Sintaxa vectori *)
+(* Sintaxa vectori nat*)
 Inductive VExp :=
 | vvar: string -> VExp 
-| vect: TipVector -> VExp
-| vplus: VExp -> VExp -> VExp (*concatenare*)
-| nth_elem: AExp -> VExp -> VExp (*returneaza al n-lea element al vectorului*)
-| head: VExp -> VExp 
-| tail: VExp -> VExp 
+| vect: VectorNat -> VExp
+| vnum: AExp -> VExp
+(*| plusV: VExp -> VExp -> VExp (*concatenare*)*)
+(*| nth_elem: AExp -> VExp -> VExp (*returneaza al n-lea element al vectorului*)*)
+| headv: VExp -> VExp 
+| tailv: VExp -> VExp 
 | vlength: VExp -> VExp
-| reverse: VExp -> VExp
+(*| reverse: VExp -> VExp*)
 | extractn: AExp -> VExp -> VExp. (*returneaza primele n elemente ale vectorului*)
 
-Coercion vect: TipVector >-> VExp.
+Coercion vect: VectorNat >-> VExp.
 Coercion vvar: string >-> VExp.
 
 (* Notatii vectori *)
-Notation "A |+| B" := (vplus A B)(at level 50, left associativity).
+(*Notation "A |+| B" := (plusV A B)(at level 50, left associativity).*)
+
 (*
-Definition plusV (v1 v2 : TipVector) : TipVector :=
-  match v1, v2 with
-    | error_vect, vector v2 => vector v2
-    | vector v1, error_vect => vector v1
-    | vector v1, vector v2 => elem (v1 ++ v2)
+Definition plusV (n1 n2 : VectorNat) : VectorNat :=
+  match n1, n2 with
+    | error_vector, _ => error_vector
+    | _, error_vector => error_vector
+    | vectornat v1, vectornat v2 => vectornat (concat v1 v2)
+    end.*)
+
+Definition lengthV (n1 : VectorNat) : VExp :=
+  match n1 with
+    | error_vector => error_vector
+    | vectornat v1 => vnum (length v1)
+    end. 
+
+Definition firstn (n:TipNat) (n1 : VectorNat) : VectorNat :=
+  match n, n1 with
+    | _, error_vector => error_vector
+    | error_nat, _ => error_vector
+    | numar v, vectornat v1 => vectornat (firstn v v1)
+    end.
+
+(*
+Definition nthelem (n:TipNat) (n1 : VectorNat) : VExp :=
+  match n, n1 with
+    | _, error_vector => error_vector
+    | error_nat, _ => error_vector
+    | numar v, vectornat v1 => vnum (nth v v1)
     end. *)
+
+(*
+Definition reverseV (n1 : VectorNat) : VectorNat :=
+  match n1 with
+    | error_vector => error_vector
+    | vectornat v1 => vectornat (rev v1)
+    end. *)
+
+Definition headV (n1 : VectorNat) : VExp :=
+  match n1 with
+    | error_vector => error_vector
+    | vectornat v1 => vnum (hd v1)
+    end. 
+
+Definition tailV (n1 : VectorNat) : VExp :=
+  match n1 with
+    | error_vector => error_vector
+    | vectornat v1 => vnum (tl v1)
+    end.
+
 
 (* Sintaxa booleana *)
 
@@ -362,11 +356,12 @@ Inductive BExp :=
 | bgte : AExp -> AExp -> BExp
 | bnot : BExp -> BExp
 | band : BExp -> BExp -> BExp
-| bor : BExp -> BExp -> BExp.
-(*| bxor : BExp -> BExp -> BExp
-| bnand : BExp -> BExp -> BExp
+| bor : BExp -> BExp -> BExp
+| bxor : BExp -> BExp -> BExp
 | bimply : BExp -> BExp -> BExp.
-*)
+
+Coercion bvar: string >-> BExp.
+
 (* Notatii pentru operatii boolene *)
 Notation "A <' B" := (blt A B) (at level 70).
 Notation "A <e' B" := (blte A B) (at level 70).
@@ -375,6 +370,8 @@ Notation "A >e' B" := (bgte A B) (at level 70).
 Notation "!' A" := (bnot A)(at level 51, left associativity).
 Notation "A &&' B" := (band A B)(at level 52, left associativity).
 Notation "A ||' B" := (bor A B)(at level 53, left associativity).
+Notation "A ->' B" := (bimply A B)(at level 53, left associativity).
+Notation "A ~XOR~ B" := (bxor A B)(at level 53, left associativity).
 
 Definition lt_TipBool (n1 n2 : TipNat) : TipBool :=
   match n1, n2 with
@@ -424,6 +421,20 @@ Definition or_TipBool (n1 n2 : TipBool) : TipBool :=
     | boolean v1, boolean v2 => boolean (orb v1 v2)
     end.
 
+Definition imply_TipBool (n1 n2 : TipBool) : TipBool :=
+  match n1, n2 with
+    | error_bool, _ => error_bool
+    | _, error_bool => error_bool
+    | boolean v1, boolean v2 => boolean (implb v1 v2)
+    end.
+
+Definition xor_TipBool (n1 n2 : TipBool) : TipBool :=
+  match n1, n2 with
+    | error_bool, _ => error_bool
+    | _, error_bool => error_bool
+    | boolean v1, boolean v2 => boolean (xorb v1 v2)
+    end.
+
 (* Semantica recursiva pentru operatii boolene *)
 
 Fixpoint beval_r (a : BExp) (envnat : Env) : TipBool :=
@@ -442,6 +453,8 @@ Fixpoint beval_r (a : BExp) (envnat : Env) : TipBool :=
   | bnot b1 => (not_TipBool (beval_r b1 envnat))
   | band b1 b2 => (and_TipBool (beval_r b1 envnat) (beval_r b2 envnat))
   | bor b1 b2 => (or_TipBool (beval_r b1 envnat) (beval_r b2 envnat))
+  | bimply b1 b2 => (imply_TipBool (beval_r b1 envnat) (beval_r b2 envnat))
+  | bxor b1 b2 => (xor_TipBool (beval_r b1 envnat) (beval_r b2 envnat))
   end.
 
 (* Semantica Big-Step pentru operatii boolene *)
@@ -489,6 +502,16 @@ Inductive beval : BExp -> Env -> TipBool -> Prop :=
     a2 ={ sigma }=> i2 ->
     b = (or_TipBool i1 i2) ->
     (a1 ||' a2) ={ sigma }=> b 
+| b_xor : forall a1 a2 i1 i2 sigma b,
+    a1 ={ sigma }=> i1 ->
+    a2 ={ sigma }=> i2 ->
+    b = (xor_TipBool i1 i2) ->
+    (a1 ~XOR~ a2) ={ sigma }=> b 
+| b_imply : forall a1 a2 i1 i2 sigma b,
+    a1 ={ sigma }=> i1 ->
+    a2 ={ sigma }=> i2 ->
+    b = (imply_TipBool i1 i2) ->
+    (a1 ->' a2) ={ sigma }=> b 
 where "B ={ S }=> B'" := (beval B S B').
 
 (* Because "n" is not declared *)
@@ -502,28 +525,107 @@ Proof.
   - simpl. reflexivity.
 Qed.
 
+
+Require Import Ascii.
+(* Sintaxa siruri de caractere *)
+Inductive CExp :=
+| cvar: string -> CExp 
+| csir: TipString -> CExp
+| cnum: AExp -> CExp
+| cbool: BExp -> CExp
+| cprefix: CExp -> CExp
+(*| char: (option ascii) -> CExp*)
+| concat: CExp -> CExp -> CExp
+| clength: CExp -> CExp
+(*| nth_char: CExp -> AExp -> CExp*)
+| substringNM: CExp -> AExp -> AExp -> CExp.
+
+Coercion csir: TipString >-> CExp.
+Coercion cvar: string >-> CExp.
+
+
+(* Notatii operatii siruri de caractere *)
+Notation "A +&+ B" := (concat A B)(at level 50, left associativity).
+(*Notation "A 'caracterul' B" := (nth_char A B)(at level 50, left associativity).*)
+Notation "A 'incepand' B 'lungime' C" := (substringNM A B C)(at level 50, left associativity).
+(*
+Definition char_TipString (n1 : (option ascii)) : TipString :=
+  match n1 with
+    | error_string => error_string
+    | sirchar v1 => sirchar v1
+    end.*)
+
+(*
+Definition nth_char_TipString (n1 : TipString) (n2 : TipNat) : CExp :=
+  match n1, n2 with
+    | error_string, _ => error_string
+    | sirchar v1, error_nat => error_string
+    | sirchar v1, numar v2 => sirchar (string_of_list_ascii(get v2 v1))
+    end.*)
+
+Fixpoint lengths (s : string) : nat :=
+  match s with
+  | EmptyString => 0
+  | String c s' => S (lengths s')
+  end.
+
+Definition length_TipString (n1 : TipString) : CExp :=
+  match n1 with
+    | error_string => error_string
+    | sirchar v1 => cnum (lengths v1)
+    end.
+
+Definition concat_TipString (n1 n2 : TipString) : TipString :=
+  match n1, n2 with
+    | error_string, _ => error_string
+    | _, error_string => error_string
+    | sirchar v1, sirchar v2 => sirchar (v1 ++ v2)
+    end.
+
+Definition substringNM_TipString (n1 : TipString) (N M : TipNat) : TipString :=
+  match n1, N, M with
+    | error_string, _, _ => error_string
+    | _, error_nat, _ => error_string
+    | _, _, error_nat => error_string
+    | sirchar v1, numar N, numar M => sirchar (substring N M v1)
+    end.
+
+
 (* Sintaxa pentru statements *)
 Inductive Stmt :=
   | nat_decl: string -> AExp -> Stmt 
   | bool_decl: string -> BExp -> Stmt 
-  | char_decl: string -> CExp -> Stmt     
+  | char_decl: string -> CExp -> Stmt 
+  | vect_decl: string -> VExp -> Stmt 
   | nat_assign : string -> AExp -> Stmt
   | bool_assign : string -> BExp -> Stmt 
   | char_assign : string -> CExp -> Stmt 
+  | vect_assign : string -> VExp -> Stmt 
   | sequence : Stmt -> Stmt -> Stmt
   | while : BExp -> Stmt -> Stmt
   | ifthenelse : BExp -> Stmt -> Stmt -> Stmt
   | ifthen : BExp -> Stmt -> Stmt
+  | myswitch : BExp -> list BExp -> list Stmt -> Stmt
+  | nat_input : string -> list TipNat -> Stmt
+  | nat_output : string -> list TipNat -> Stmt
+  | bool_input : string -> list TipBool -> Stmt
+  | bool_output : string -> list TipBool -> Stmt
+  | string_input : string -> list TipString -> Stmt
+  | string_output : string -> list TipString -> Stmt
+  | vect_input : string -> list VectorNat -> Stmt
+  | vect_output : string -> list VectorNat -> Stmt
   | skip : Stmt -> Stmt.
-  (*| switch : BExp -> Stmt
-  | break : Stmt.
-  *)
+  (* | break : Stmt*)
+
+
 Notation "X :n= A" := (nat_assign X A)(at level 90).
 Notation "X :b= A" := (bool_assign X A)(at level 90).
 Notation "X :s= A" := (char_assign X A)(at level 90).
+Notation "X :l= A" := (vect_assign X A)(at level 90).
 Notation "'iNat' X ::= A" := (nat_decl X A)(at level 90).
 Notation "'iBool' X ::= A" := (bool_decl X A)(at level 90).
 Notation "'iSir' X ::= A" := (char_decl X A)(at level 90).
+Notation "'iList' X ::= A" := (vect_decl X A)(at level 90).
 Notation "S1 ;; S2" := (sequence S1 S2) (at level 93, right associativity).
 Notation "'daca' ( A ) 'atunci' { B }" := (ifthen A B) (at level 97).
 Notation "'daca' ( A ) 'atunci' { B } 'altfel' { C }" := (ifthenelse A B C) (at level 97).
@@ -531,6 +633,7 @@ Notation " A '?' B ':' C " := (ifthenelse A B C) (at level 97).
 Notation "'cat_timp' ( A ) { B }" := (while A B) (at level 97).
 Notation "'pentru' ( A # B # C ) { S }" := (A ;; while B ( S ;; C )) (at level 97).
 Notation "'sari_peste' A " := (skip A) (at level 97).
+Notation "'testeaza' ( B ) 'cazurile' ( L1 ) 'optiunile' ( L2 )" := (myswitch B L1 L2) (at level 97).
 
 Reserved Notation "S -{ Sigma }-> Sigma'" (at level 60).
 
