@@ -279,13 +279,14 @@ Qed.
 Inductive VExp :=
 | vvar: string -> VExp 
 | vect: VectorNat -> VExp
+| vectlist: list TipNat -> VExp
 | vnum: AExp -> VExp
-(*| plusV: VExp -> VExp -> VExp (*concatenare*)*)
-(*| nth_elem: AExp -> VExp -> VExp (*returneaza al n-lea element al vectorului*)*)
-| headv: VExp -> VExp 
-| tailv: VExp -> VExp 
+| plus: VExp -> VExp -> VExp (*concatenare*)
+| nth_elem: AExp -> VExp -> VExp (*returneaza al n-lea element al vectorului*)
+| headv: VExp -> VExp
+| tailv: VExp -> VExp
 | vlength: VExp -> VExp
-(*| reverse: VExp -> VExp*)
+| reverse: VExp -> VExp
 | extractn: AExp -> VExp -> VExp. (*returneaza primele n elemente ale vectorului*)
 
 Coercion vect: VectorNat >-> VExp.
@@ -294,13 +295,13 @@ Coercion vvar: string >-> VExp.
 (* Notatii vectori *)
 (*Notation "A |+| B" := (plusV A B)(at level 50, left associativity).*)
 
-(*
+
 Definition plusV (n1 n2 : VectorNat) : VectorNat :=
   match n1, n2 with
     | error_vector, _ => error_vector
     | _, error_vector => error_vector
-    | vectornat v1, vectornat v2 => vectornat (concat v1 v2)
-    end.*)
+    | vectornat v1, vectornat v2 => vectornat (v1 ++ v2)
+    end.
 
 Definition lengthV (n1 : VectorNat) : VExp :=
   match n1 with
@@ -308,40 +309,38 @@ Definition lengthV (n1 : VectorNat) : VExp :=
     | vectornat v1 => vnum (length v1)
     end. 
 
-Definition firstn (n:TipNat) (n1 : VectorNat) : VectorNat :=
+Definition extractnV (n1 : VectorNat) (n:TipNat) : VectorNat :=
   match n, n1 with
     | _, error_vector => error_vector
     | error_nat, _ => error_vector
     | numar v, vectornat v1 => vectornat (firstn v v1)
     end.
 
-(*
-Definition nthelem (n:TipNat) (n1 : VectorNat) : VExp :=
-  match n, n1 with
-    | _, error_vector => error_vector
-    | error_nat, _ => error_vector
-    | numar v, vectornat v1 => vnum (nth v v1)
-    end. *)
-
-(*
 Definition reverseV (n1 : VectorNat) : VectorNat :=
   match n1 with
     | error_vector => error_vector
     | vectornat v1 => vectornat (rev v1)
-    end. *)
-
-Definition headV (n1 : VectorNat) : VExp :=
-  match n1 with
-    | error_vector => error_vector
-    | vectornat v1 => vnum (hd v1)
-    end. 
+    end.
 
 Definition tailV (n1 : VectorNat) : VExp :=
   match n1 with
     | error_vector => error_vector
-    | vectornat v1 => vnum (tl v1)
+    | vectornat v1 => vectlist (v1)
     end.
 
+Definition headV (n1 : VectorNat) : VExp :=
+  match n1 with
+    | error_vector => error_vector
+    | vectornat v1 => vnum (anum (hd error_nat v1))
+    end.
+
+
+Definition nthelem (n:TipNat) (n1 : VectorNat) : VExp :=
+  match n, n1 with
+    | _, error_vector => error_vector
+    | error_nat, _ => error_vector
+    | numar v, vectornat v1 => vnum (nth v v1 error_nat)
+    end.
 
 (* Sintaxa booleana *)
 
