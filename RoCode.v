@@ -6,6 +6,10 @@ Scheme Equality for string.
 Scheme Equality for list.
 Require Import ZArith.
 
+Notation "[ ]" := nil (format "[ ]") : list_scope.
+Notation "[ x ]" := (cons x nil) : list_scope.
+Notation "[ x ; y ; .. ; z ]" := (cons x (cons y .. (cons z nil) ..)) : list_scope.
+
 
 (* Constructor pentru numere naturale *)
 Inductive TipNat :=
@@ -36,9 +40,10 @@ Inductive Rezultat :=
   | default : Rezultat
   | rez_nat : TipNat -> Rezultat
   | rez_bool : TipBool -> Rezultat
-  | rez_string : TipString -> Rezultat.
+  | rez_string : TipString -> Rezultat
+  | rez_vector : VectorNat -> Rezultat.
 
-Scheme Equality for Rezultat.
+(*Scheme Equality for Rezultat.*)
 
 (*Variabilele vor fi de tip string, initial fiind nedeclarate*)
 Definition Env := string -> Rezultat.
@@ -46,7 +51,7 @@ Definition env : Env := fun x => nondecl.
 
 Compute (env "x").
 
-
+(*
 (*Functie care verifica daca doi termeni au acelasi tip*)
 
 Definition check_type_eq (t1 : Rezultat) (t2 : Rezultat) : bool :=
@@ -80,15 +85,16 @@ Definition check_type_eq (t1 : Rezultat) (t2 : Rezultat) : bool :=
 
 Compute (check_type_eq (rez_nat 3) (rez_nat 5)). (* true *)
 Compute (check_type_eq noninit (rez_nat 17)). (* false *)
-Compute (check_type_eq (rez_bool false) (rez_bool true)). (* true *)
+Compute (check_type_eq (rez_bool false) (rez_bool true)). (* true *) *)
 
 Definition update (env : Env) (x : string) (v : Rezultat) : Env :=
   fun y =>
-    if (andb (eqb x y ) (check_type_eq (env x) (env y)))
+    (*if (andb (eqb x y ) (check_type_eq (env x) (env y))) *)
+    if (eqb x y)
     then v
     else (env y).
 
-Notation "S [ V /' X ]" := (update S X V) (at level 0).
+(*Notation "S [ V /' X ]" := (update S X V) (at level 0).*)
 
 Compute (env "y").
 Compute (update (update env "y" (default)) "y" (rez_nat 3) "y").
@@ -281,7 +287,7 @@ Inductive VExp :=
 | vvar: string -> VExp 
 | vect: VectorNat -> VExp
 | vectlist: list TipNat -> VExp
-| vnum: AExp -> VExp
+| vnum: TipNat -> VExp
 | plus: VExp -> VExp -> VExp (*concatenare*)
 | nth_elem: AExp -> VExp -> VExp (*returneaza al n-lea element al vectorului*)
 | headv: VExp -> VExp
@@ -309,13 +315,13 @@ Definition plusV (n1 n2 : VectorNat) : VectorNat :=
     | vectornat v1, vectornat v2 => vectornat (v1 ++ v2)
     end.
 
-Definition lengthV (n1 : VectorNat) : VExp :=
+Definition lengthV (n1 : VectorNat) : VectorNat :=
   match n1 with
     | error_vector => error_vector
-    | vectornat v1 => vnum (length v1)
+    | vectornat v1 => vectornat [numar (length v1)]
     end. 
 
-Definition extractnV (n1 : VectorNat) (n:TipNat) : VectorNat :=
+Definition extractnV (n : TipNat) (n1: VectorNat) : VectorNat :=
   match n, n1 with
     | _, error_vector => error_vector
     | error_nat, _ => error_vector
@@ -328,25 +334,89 @@ Definition reverseV (n1 : VectorNat) : VectorNat :=
     | vectornat v1 => vectornat (rev v1)
     end.
 
-Definition tailV (n1 : VectorNat) : VExp :=
+Definition tailV (n1 : VectorNat) : VectorNat :=
   match n1 with
     | error_vector => error_vector
-    | vectornat v1 => vectlist (v1)
+    | vectornat v1 => vectornat (v1)
     end.
 
-Definition headV (n1 : VectorNat) : VExp :=
+Definition headV (n1 : VectorNat) : VectorNat :=
   match n1 with
     | error_vector => error_vector
-    | vectornat v1 => vnum (anum (hd error_nat v1))
+    | vectornat v1 => vectornat [hd error_nat v1]
     end.
 
 
-Definition nthelem (n:TipNat) (n1 : VectorNat) : VExp :=
+Definition nthelem (n:TipNat) (n1 : VectorNat) : VectorNat :=
   match n, n1 with
     | _, error_vector => error_vector
     | error_nat, _ => error_vector
-    | numar v, vectornat v1 => vnum (nth v v1 error_nat)
+    | numar v, vectornat v1 => vectornat [nth v v1 error_nat]
     end.
+
+(* Semantica recursiva pentru vectori nat *)
+
+Fixpoint veval_r (a : VExp) (env : Env) : VectorNat :=
+  match a with
+  | vvar v => match (env v) with
+                | rez_vector n => n
+                | _ => error_vector
+                end
+  | vect v => v
+  | vectlist v => vectornat v
+  | vnum v => vectornat [v]
+  | plus a1 a2 => (plusV (veval_r a1 env) (veval_r a2 env))
+  | nth_elem a1 a2 => (nthelem (aeval_r a1 env) (veval_r a2 env))
+  | headv a1 => (headV (veval_r a1 env))
+  | tailv a1 => (tailV  (veval_r a1 env))
+  | vlength a1 => (lengthV (veval_r a1 env))
+  | reverse a1 => (reverseV (veval_r a1 env))
+  | extractn a1 a2 => (extractnV (aeval_r a1 env) (veval_r a2 env))
+  end.
+
+(* Semantica Big-Step pentru vectori nat *)
+
+Reserved Notation "A =\ S \=> N" (at level 60).
+Inductive veval : VExp -> Env -> VectorNat -> Prop :=
+| constv : forall n sigma, vect n =\ sigma \=> n
+| varv : forall v sigma, vvar v =\ sigma \=>  match (sigma v) with
+                                              | rez_vector x => x
+                                              | _ => error_vector
+                                              end
+| vectlistv : forall n sigma, vectlist n =\ sigma \=> vectornat n
+| vnumv : forall n sigma, vnum n =\ sigma \=> vectornat [n]
+| addv : forall a1 a2 i1 i2 sigma n,
+    a1 =\ sigma \=> i1 ->
+    a2 =\ sigma \=> i2 ->
+    n = (plusV i1 i2) ->
+    a1 |+| a2 =\sigma\=> n
+| nth_elemv : forall a1 a2 i1 i2 sigma n,
+    a1 =[ sigma ]=> i1 ->
+    a2 =\ sigma \=> i2 ->
+    n = (nthelem i1 i2) ->
+    Elementul a1 din a2 =\sigma\=> n
+| headvv : forall a1 i1 sigma n,
+    a1 =\ sigma \=> i1 ->
+    n = (headV i1) ->
+    h( a1 ) =\sigma\=> n
+| tailvv : forall a1 i1 sigma n,
+    a1 =\ sigma \=> i1 ->
+    n = (headV i1) ->
+    t( a1 ) =\sigma\=> n
+| lengthv : forall a1 i1 sigma n,
+    a1 =\ sigma \=> i1 ->
+    n = (lengthV i1) ->
+    lungimelist a1 =\sigma\=> n
+| reversev : forall a1 i1 sigma n,
+    a1 =\ sigma \=> i1 ->
+    n = (lengthV i1) ->
+    invers a1 =\sigma\=> n
+| extractnvv : forall a1 a2 i1 i2 sigma n,
+    a1 =[ sigma ]=> i1 ->
+    a2 =\ sigma \=> i2 ->
+    n = (extractnV i1 i2) ->
+    Primele a1 elemente a2 =\sigma\=> n
+where "a =\ sigma \=> n" := (veval a sigma n).
 
 (* Sintaxa booleana *)
 
@@ -427,35 +497,35 @@ Definition gte_TipBool (n1 n2 : TipNat) : TipBool :=
 Definition not_TipBool (n :TipBool) : TipBool :=
   match n with
     | error_bool => error_bool
-    | boolean v => boolean (negb v)
+    | boolean v => negb v
     end.
 
 Definition and_TipBool (n1 n2 : TipBool) : TipBool :=
   match n1, n2 with
     | error_bool, _ => error_bool
     | _, error_bool => error_bool
-    | boolean v1, boolean v2 => boolean (andb v1 v2)
+    | boolean v1, boolean v2 => andb v1 v2
     end.
 
 Definition or_TipBool (n1 n2 : TipBool) : TipBool :=
   match n1, n2 with
     | error_bool, _ => error_bool
     | _, error_bool => error_bool
-    | boolean v1, boolean v2 => boolean (orb v1 v2)
+    | boolean v1, boolean v2 => orb v1 v2
     end.
 
 Definition imply_TipBool (n1 n2 : TipBool) : TipBool :=
   match n1, n2 with
     | error_bool, _ => error_bool
     | _, error_bool => error_bool
-    | boolean v1, boolean v2 => boolean (implb v1 v2)
+    | boolean v1, boolean v2 => implb v1 v2
     end.
 
 Definition xor_TipBool (n1 n2 : TipBool) : TipBool :=
   match n1, n2 with
     | error_bool, _ => error_bool
     | _, error_bool => error_bool
-    | boolean v1, boolean v2 => boolean (xorb v1 v2)
+    | boolean v1, boolean v2 => xorb v1 v2
     end.
 
 (* Semantica recursiva pentru operatii boolene *)
@@ -537,11 +607,11 @@ Inductive beval : BExp -> Env -> TipBool -> Prop :=
     a2 ={ sigma }=> i2 ->
     b = (xor_TipBool i1 i2) ->
     (a1 ~XOR~ a2) ={ sigma }=> b 
-(*| b_equalbool : forall a1 a2 i1 i2 sigma b,
-    a1 =[ sigma ]=> i1 ->
-    a2 =[ sigma ]=> i2 ->
+| b_equalbool : forall a1 a2 i1 i2 sigma b,
+    a1 ={ sigma }=> i1 ->
+    a2 ={ sigma }=> i2 ->
     b = (eqb_TipBool i1 i2) ->
-    a1 ==b a2 ={ sigma }=> b *)
+    a1 ==b a2 ={ sigma }=> b 
 | b_imply : forall a1 a2 i1 i2 sigma b,
     a1 ={ sigma }=> i1 ->
     a2 ={ sigma }=> i2 ->
@@ -567,7 +637,6 @@ Inductive CExp :=
 | cvar: string -> CExp 
 | csir: TipString -> CExp
 | cnum: AExp -> CExp
-| cbool: BExp -> CExp
 (*| char: (option ascii) -> CExp*)
 | concat: CExp -> CExp -> CExp
 | clength: CExp -> CExp
@@ -606,10 +675,10 @@ Fixpoint lengths (s : string) : nat :=
   | String c s' => S (lengths s')
   end.
 
-Definition length_TipString (n1 : TipString) : CExp :=
+Definition length_TipString (n1 : TipString) : TipString :=
   match n1 with
     | error_string => error_string
-    | sirchar v1 => cnum (lengths v1)
+    | sirchar v1 => sirchar ("numar (lengths v1)")
     end.
 
 Definition concat_TipString (n1 n2 : TipString) : TipString :=
@@ -627,6 +696,48 @@ Definition substringNM_TipString (n1 : TipString) (N M : TipNat) : TipString :=
     | sirchar v1, numar N, numar M => sirchar (substring N M v1)
     end.
 
+(* Semantica recursiva pentru siruri de caractere *)
+
+Fixpoint ceval_r (a : CExp) (env : Env) : TipString :=
+  match a with
+  | cvar v => match (env v) with
+                | rez_string n => n
+                | _ => error_string
+                end
+  | cnum v => sirchar "v"
+  | csir v => v
+  | concat a1 a2 => (concat_TipString (ceval_r a1 env) (ceval_r a2 env))
+  | clength a1=> (length_TipString (ceval_r a1 env))
+  | substringNM a1 a2 a3 => (substringNM_TipString (ceval_r a1 env) (aeval_r a2 env) (aeval_r a3 env))
+  end.
+
+(* Semantica Big-Step pentru siruri de caractere *)
+
+Reserved Notation "A =/ S /=> N" (at level 60).
+Inductive ceval : CExp -> Env -> TipString -> Prop :=
+| consts : forall n sigma, csir n =/ sigma /=> n
+| vars : forall v sigma, cvar v =/ sigma /=>  match (sigma v) with
+                                              | rez_string x => x
+                                              | _ => error_string
+                                              end
+| csirc : forall n sigma, cnum n =/ sigma /=> sirchar "n"
+| concatv : forall a1 a2 i1 i2 sigma n,
+    a1 =/ sigma /=> i1 ->
+    a2 =/ sigma /=> i2 ->
+    n = ( concat_TipString i1 i2) ->
+    a1 +&+ a2 =/sigma/=> n
+| clengthv : forall a1 i1 sigma n,
+    a1 =/ sigma /=> i1 ->
+    n = (length_TipString i1) ->
+    lungimesir a1 =/sigma/=> n
+| substringNMv : forall a1 a2 a3 i1 i2 i3 sigma n,
+    a1 =/ sigma /=> i1 ->
+    a2 =[ sigma ]=> i2 ->
+    a3 =[ sigma ]=> i3 ->
+    n = (substringNM_TipString i1 i2 i3) ->
+    a1 incepand a2 lungime a3 =/sigma/=> n
+where "a =/ sigma /=> n" := (ceval a sigma n).
+
 
 (* Sintaxa pentru statements *)
 Inductive Stmt :=
@@ -642,8 +753,8 @@ Inductive Stmt :=
   | while : BExp -> Stmt -> Stmt
   | ifthenelse : BExp -> Stmt -> Stmt -> Stmt
   | ifthen : BExp -> Stmt -> Stmt
-  | myswitch : AExp -> VectorNat -> list Stmt -> Stmt
-  | skip : Stmt -> Stmt.
+  | myswitch : AExp -> VExp -> list Stmt -> Stmt
+  | skip : Stmt -> Stmt -> Stmt.
 
 
 Notation "X :n= A" := (nat_assign X A)(at level 90).
@@ -660,55 +771,10 @@ Notation " 'daca' ( A ) 'atunci' { B } 'altfel' { C }" := (ifthenelse A B C) (at
 Notation " A 'atunci' B 'altfel' C " := (ifthenelse A B C) (at level 97).
 Notation "'cat_timp' ( A ) { B }" := (while A B) (at level 97).
 Notation "'pentru' ( A # B # C ) { S }" := (A ;; while B ( S ;; C )) (at level 97).
-Notation "'sari_peste' A " := (skip A) (at level 97).
-Notation "'Lista_input ' X ' : ' A " := (vect_decl X A) (at level 97).
-Notation "'Lista_output ' X ' : ' A " := (vect_decl X A) (at level 97).
+Notation "'sari_peste' A 'incepe' B" := (skip A B) (at level 97).
+Notation "'input' X :>: A " := (vect_decl X A) (at level 97).
+Notation "'output' X :<: A " := (vect_decl X A) (at level 97).
 Notation "'testeaza' ( B ) 'cazurile' ( L1 ) 'optiunile' ( L2 )" := (myswitch B L1 L2) (at level 97).
-
-(*Exemple functionalitate*)
-
-Definition example :=
-    iNat "i" ::= 0 ;;
-    iNat "sum" ::= 0 ;;
-    iSir "S1" ::= "sirul1" ;; 
-    iSir "S2" ::= "sirul2" ;; 
-    
-    iSir "S3" ::= "S1" +&+ "S2" ;; 
-
-    iSir "S4" ::= "S1" incepand 2 lungime 3 ;;
-
-    iSir "S5" ::= lungimesir "S4" ;;
-    (*
-    Lista_input X : [ 1 ; 2; 3];;
-    
-    iList L ::= [ 1; 2; 3 ] ;;
-    
-    (testeaza ( "sum" )
-    cazurile ( [ 1; 2; 3 ] )
-    optiunile (  "sum" :n= 0 "sum" :n= 1 "sum" :n= 2 )
-    ) ;; *)
-
-    (daca ( "sum" ==n 0 )
-    atunci { "sum" :n= 0 }
-    altfel { "sum" :n= 0 }) ;;
-
-    (cat_timp 
-        ("i" <' 6) 
-        {
-           "sum" :n= "sum" +' "i" ;;
-           "i" :n= "i" +' 1
-        }) ;;
-
-    iNat "sum" ::= 0 ;;
-    (pentru ( iNat "i" ::= 0 # "i" <e' 6 # "i" :n= "i" +' 1 ) {
-      "sum" :n= "sum" +' "i"
-    }) ;;
-
-    sari_peste "i" :n= 0 ;;
-    ("i" ==n 0 atunci "i" :n= 0 altfel "i" :n= 0)
-    .
-
-
 
 (* Semantica tip Big-Step pentru statements *)
 Reserved Notation "S -{ Sigma }-> Sigma'" (at level 60).
@@ -716,7 +782,7 @@ Inductive eval : Stmt -> Env -> Env -> Prop :=
 | e_nat_decl: forall a i x sigma sigma',
    a =[ sigma ]=> i ->
    sigma' = (update sigma x (rez_nat i)) ->
-   (x :n= a) -{ sigma }-> sigma'
+   (iNat x ::= a) -{ sigma }-> sigma'
 | e_nat_assign: forall a i x sigma sigma',
     a =[ sigma ]=> i ->
     sigma' = (update sigma x (rez_nat i)) ->
@@ -724,19 +790,27 @@ Inductive eval : Stmt -> Env -> Env -> Prop :=
 | e_bool_decl: forall a i x sigma sigma',
    a ={ sigma }=> i ->
    sigma' = (update sigma x (rez_bool i)) ->
-   (x :b= a) -{ sigma }-> sigma'
+   (iBool x ::= a) -{ sigma }-> sigma'
 | e_bool_assign: forall a i x sigma sigma',
     a ={ sigma }=> i ->
     sigma' = (update sigma x (rez_bool i)) ->
     (x :b= a) -{ sigma }-> sigma'
 | e_char_decl: forall a i x sigma sigma',
-   a ={ sigma }=> i ->
+   a =/ sigma /=> i ->
    sigma' = (update sigma x (rez_string i)) ->
-   (x :s= a) -{ sigma }-> sigma'
+   (iSir x ::= a) -{ sigma }-> sigma'
 | e_char_assign: forall a i x sigma sigma',
-    a ={ sigma }=> i ->
+    a =/ sigma /=> i ->
     sigma' = (update sigma x (rez_string i)) ->
     (x :s= a) -{ sigma }-> sigma'
+| e_string_decl: forall a i x sigma sigma',
+   a =\ sigma \=> i ->
+   sigma' = (update sigma x (rez_vector i)) ->
+   (iList x ::= a) -{ sigma }-> sigma'
+| e_string_assign: forall a i x sigma sigma',
+    a =\ sigma \=> i ->
+    sigma' = (update sigma x (rez_vector i)) ->
+    (x :l= a) -{ sigma }-> sigma'
 | e_seq : forall s1 s2 sigma sigma1 sigma2,
     s1 -{ sigma }-> sigma1 ->
     s2 -{ sigma1 }-> sigma2 ->
@@ -758,6 +832,9 @@ Inductive eval : Stmt -> Env -> Env -> Prop :=
     b ={ sigma }=> true ->
     (s ;; while b s) -{ sigma }-> sigma' ->
     while b s -{ sigma }-> sigma'
+| e_skip : forall s1 s2 sigma sigma2,
+    s2 -{ sigma }-> sigma2 ->
+    skip s1 s2 -{ sigma }-> sigma2
 where "s -{ sigma }-> sigma'" := (eval s sigma sigma').
 
 (* Semantica recursiva pentru statements *)
@@ -769,10 +846,12 @@ Fixpoint eval_r (s : Stmt) (env : Env) (gas: nat) : Env :=
                 | sequence S1 S2 => eval_r S2 (eval_r S1 env gas') gas'
                 | nat_decl a aexp => update (update env a default) a (rez_nat (aeval_r aexp env))
                 | bool_decl b bexp => update (update env b default) b (rez_bool (beval_r bexp env))
-                | char_decl b cexp => update (update env c default) c (rez_string (ceval_r cexp env))
+                | char_decl c cexp => update (update env c default) c (rez_string (ceval_r cexp env))
+                | vect_decl v vexp => update (update env v default) v (rez_vector (veval_r vexp env))
                 | nat_assign a aexp => update env a (rez_nat (aeval_r aexp env))
                 | bool_assign b bexp => update env b (rez_bool (beval_r bexp env))
                 | char_assign c cexp => update env c (rez_string (ceval_r cexp env))
+                | vect_assign v vexp => update env v (rez_vector (veval_r vexp env))
                 | ifthen cond s' => 
                     match (beval_r cond env) with
                     | error_bool => env
@@ -797,24 +876,43 @@ Fixpoint eval_r (s : Stmt) (env : Env) (gas: nat) : Env :=
                                      | false => env
                                      end
                         end
+                | myswitch a L1 L2 => match (aeval_r a env) with
+                                      | _ => eval_r (myswitch a (h( L1 )) ( L2 ))    env gas' 
+                                      end            
+                | skip a b => eval_r b env gas'                
                 end
     end.
-
 
 (*Exemple functionalitate*)
 
 Definition while_stmt :=
     iNat "i" ::= 0 ;;
     iNat "sum" ::= 0 ;;
-    cat_timp 
+    (cat_timp 
         ("i" <' 6) 
         {
            "sum" :n= "sum" +' "i" ;;
            "i" :n= "i" +' 1
-        }
+        });;
+
+     iNat "i2" ::= 0 ;;
+     (daca ( "i" ==n 0 )
+        atunci { "i2" :n= 3 }
+        altfel { "i2" :n= 4 });;
+
+    iNat "i3" ::= "i2" ^' 2 ;;
+    iNat "i4" ::= "i2" %' 3 ;;
+    iNat "i5" ::= "i2" <?> 2 ;;
+    iNat "i6" ::= "i2" >?< 2 
     .
 
+Compute (eval_r while_stmt env 100) "i".
 Compute (eval_r while_stmt env 100) "sum".
+Compute (eval_r while_stmt env 100) "i2".
+Compute (eval_r while_stmt env 100) "i3".
+Compute (eval_r while_stmt env 100) "i4".
+Compute (eval_r while_stmt env 100) "i5".
+Compute (eval_r while_stmt env 100) "i6".
 
 Definition for_stmt :=
     iNat "sum" ::= 0 ;;
@@ -823,4 +921,61 @@ Definition for_stmt :=
     }.
 
 Compute (eval_r for_stmt env 100) "sum".
+
+Definition example :=
+    iNat "sum" ::= 1 ;;
+
+    iSir "S1" ::= "sirul1" ;; 
+    iSir "S2" ::= "sirul2" ;; 
+    
+    iSir "S3" ::= "S1" +&+ "S2" ;; 
+
+    iSir "S4" ::= "S1" incepand 2 lungime 3 ;;
+
+    iSir "S5" ::= lungimesir "S4" ;;
+    
+    iList "L" ::= (vectornat [ (numar 1); (numar 2); (numar 3) ]) ;;
+    
+    (testeaza ( "sum" )
+    cazurile ( vectornat [ (numar 1); (numar 2); (numar 3) ] )
+    optiunile (  ["sum" :n= 1; "sum" :n= 2; "sum" :n= 3] )
+    ) ;; 
+    
+    iList "L1" ::= lungimelist "L" ;;
+    iList "L2" ::= invers "L" ;;
+    iList "L3" ::= h( "L" );;
+    iList "L4" ::= Primele 2 elemente "L" ;;
+    iList "L5" ::= "L3" |+| "L4" ;;
+
+    iNat "i" ::= 1 ;;
+    sari_peste "i" :n= 0 incepe
+    ("i" ==n 0 atunci "i" :n= 2 altfel "i" :n= 3)
+    .
+
+Compute (eval_r example env 100) "L".
+Compute (eval_r example env 100) "L1".
+Compute (eval_r example env 100) "L2".
+Compute (eval_r example env 100) "L3".
+Compute (eval_r example env 100) "L4".
+Compute (eval_r example env 100) "L5".
+
+
+Compute (eval_r example env 100) "sum".
+
+Compute (eval_r example env 100) "i".
+
+Compute (eval_r example env 100) "S1".
+Compute (eval_r example env 100) "S2".
+Compute (eval_r example env 100) "S3".
+Compute (eval_r example env 100) "S4".
+Compute (eval_r example env 100) "S5".
+
+
+
+
+
+
+
+
+
 
